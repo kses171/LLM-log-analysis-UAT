@@ -21,7 +21,7 @@ st.title("Windows Event Log Analyzer")
 # Dropdown for event type
 event_type = st.selectbox(
     "Choose Event Type to Analyze:",
-    ("Upload CSV", "Basic Chat", "RDP Events", "Task Scheduler")
+    ("Task Scheduler", "Upload CSV", "Basic Chat", "RDP Events")
 )
 
 # BASIC CHAT SECTION

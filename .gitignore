@@ -1,0 +1,35 @@
+# Environment and secret configs
+.env
+*.env
+
+# Private key files
+*.pem
+*.key
+
+# Common language/framework ignores
+node_modules/
+dist/
+build/
+**/__pycache__/
+*.pyc
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# VS Code workspace/state
+.vscode/
+
+# Misc
+Plans.md
+TODO1.md
+Observe1.md
+
+# too big
+data/
+json_data2/
+archive1/
+PDFs/
+myvenv/
+requestsToLLM2/
+runs/
