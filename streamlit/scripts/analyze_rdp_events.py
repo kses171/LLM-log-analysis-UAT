@@ -60,7 +60,7 @@ def split_logs(logs_file: Path) -> tuple[str, Path, int]:
     return json_name, output_dir, num_parts
 
 
-def generate_first_pass(run_dir: Path, prompt_file: Path, num_parts: int, json_name: str):
+def generate_first_pass(run_dir: Path, prompt_file: Path, num_parts: int, json_name: str, temperature: float):
     """Run the first-pass timeline generation."""
     out_path = run_dir / f"{run_dir.name}-1.md"
     generate_timeline(
@@ -72,11 +72,12 @@ def generate_first_pass(run_dir: Path, prompt_file: Path, num_parts: int, json_n
         log_name=json_name,
         model_id=MODEL_ID,
         max_tokens=MAX_TOKENS,
+        temperature=temperature
     )
     return out_path
 
 
-def generate_second_pass(run_dir: Path, prompt_file: Path, first_output_md: Path):
+def generate_second_pass(run_dir: Path, prompt_file: Path, first_output_md: Path, temperature: float):
     """Run the second-pass flagged timeline generation."""
     out_path = run_dir / f"{run_dir.name}-2.md"
     generate_flagged_timeline(
@@ -89,6 +90,7 @@ def generate_second_pass(run_dir: Path, prompt_file: Path, first_output_md: Path
         max_tokens=MAX_TOKENS,
         delay_between_parts=0.0,
         model_id=MODEL_ID,
+        temperature=temperature
     )
     return out_path
 
@@ -124,7 +126,7 @@ def finalize_results(
 # ──────────────────────────────
 # Main pipeline
 # ──────────────────────────────
-def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_param: int):
+def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_temperature: float):
     """
     Analyze RDP event logs:
     1. Generate timeline (first pass)
@@ -147,11 +149,11 @@ def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_param: int
     json_name, _, num_parts = split_logs(logs_file)
 
     # 2. First pass
-    first_output_md = generate_first_pass(run_dir, prompt1_file, num_parts, json_name)
+    first_output_md = generate_first_pass(run_dir, prompt1_file, num_parts, json_name, rdp_temperature)
     time.sleep(SLEEP_BETWEEN_STAGES)
 
     # 3. Second pass
-    flagged_output_md = generate_second_pass(run_dir, prompt2_file, first_output_md)
+    flagged_output_md = generate_second_pass(run_dir, prompt2_file, first_output_md, rdp_temperature)
     time.sleep(SLEEP_BETWEEN_STAGES)
 
     # 4. Finalize
@@ -168,7 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("logs_path", type=Path, help="Path to the uploaded RDP logs file.")
     parser.add_argument("prompt1_path", type=Path, help="Path to the first prompt file.")
     parser.add_argument("prompt2_path", type=Path, help="Path to the second prompt file.")
-    parser.add_argument("rdp_param", type=int, help="Numeric parameter for RDP processing (e.g., number of events).")
+    parser.add_argument("rdp_temperature", type=float, help="Numeric parameter for RDP processing (e.g., number of events).")
     args = parser.parse_args()
 
-    main(args.logs_path, args.prompt1_path, args.prompt2_path, args.rdp_param)
+    main(args.logs_path, args.prompt1_path, args.prompt2_path, args.rdp_temperature)
