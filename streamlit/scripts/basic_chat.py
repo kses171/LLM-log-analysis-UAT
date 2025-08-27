@@ -30,7 +30,7 @@ def show_basic_chat_page():
         st.markdown(f"**{speaker}:** {text}")
 
     # Model + provider selection
-    provider = st.radio("LLM Provider", ["Local Ollama", "AWS Bedrock"])
+    provider = st.radio("LLM Provider", ["AWS Bedrock", "Ollama (NUS Server)"])
     model_name = st.text_input("Model Name", value="apac.anthropic.claude-sonnet-4-20250514-v1:0")
     system_prompt = st.text_area("System Prompt", value="You are a helpful assistant.", height=100)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.7)

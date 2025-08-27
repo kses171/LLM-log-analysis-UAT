@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 # Helper functions
 def parse_time(ts):
     if isinstance(ts, str):
+        ts = ts[:26]  # hotfix for python 3.10: keep up to microseconds
         return datetime.fromisoformat(ts)
     return ts
 
