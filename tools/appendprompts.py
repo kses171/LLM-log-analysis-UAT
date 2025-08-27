@@ -24,6 +24,7 @@ def append_prompts_to_md(md_filepath: Path, first_prompt_path: Path, \
         time_taken:
         input_tokens:
         output_tokens:
+        inter_out_path:
 
     Raises:
         FileNotFoundError: If either prompt file does not exist.

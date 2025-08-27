@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-
-import boto3
 import json
 import time
 from pathlib import Path
 from typing import Union
 import os
+import sys 
+
+# ──────────────────────────────
+# Project imports
+# ──────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+from LLM_APIs.llm_bedrock import call_bedrock  # <-- use the shared client
+
 
 def generate_flagged_timeline(
     md_filepath: Union[str, Path],
@@ -48,12 +55,6 @@ def generate_flagged_timeline(
     with prompt_path.open('r', encoding='utf-8') as f:
         prompt_template = f.read()
 
-    # 3. Initialize Bedrock client once
-    bedrock_runtime = boto3.client(
-        service_name='bedrock-runtime',
-        region_name=region  # Change to your preferred region
-    )
-
     for part_number in range(start_range, end_range):
         # Determine the file extension
         _, ext = os.path.splitext(json_path)
@@ -75,39 +76,30 @@ def generate_flagged_timeline(
             # Assuming the template expects a placeholder named 'md_content'
             prompt = prompt_template.format(md_content=md_content)
 
-        # Prepare request
-        body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
+        # Use llm_bedrock
+        reply = ""
+        for chunk in call_bedrock(
+            model_id=model_id,
+            conversation_text=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            region_name=region
+        ):
+            reply = chunk  # single final response
 
-        # Make the API call
-        response = bedrock_runtime.invoke_model(
-            modelId=model_id,  # Change model as needed
-            body=json.dumps(body)
-        )
-
-        response_body = json.loads(response['body'].read())
-        response = response_body['content'][0]['text'].strip()
-        print(f"[Part {part_number}] received {len(response)} chars")
+        print(f"[Part {part_number}] received {len(reply)} chars")
 
         # Append to markdown
         with md_path.open('a', encoding='utf-8') as md_file:
             md_file.write(f'## Part {part_number}\n\n')
-            md_file.write(response + '\n\n')
+            md_file.write(reply + '\n\n')
 
         # Optional delay
         if delay_between_parts:
             time.sleep(delay_between_parts)
 
     print(f"All responses written to {md_filepath}")
+
 
 if __name__ == "__main__":
     # === CONFIGURE THESE PATHS AND PARAMETERS ===

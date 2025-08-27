@@ -37,10 +37,10 @@ def count_tokens_from_file(file_path, model="gpt-4"):
         return None
     
 
-def count_output_tokens(base_runs_dir: Path, run_id: str, log_type: str):
+def count_output_tokens(base_runs_dir: Path, run_id: str):
     run_dir = base_runs_dir / run_id
-    path1 = run_dir / '1stoutput.md'
-    path2 = run_dir / f'{log_type}-{run_id}.md'
+    path1 = run_dir / f"{run_id}-1.md"
+    path2 = run_dir / f"{run_id}-2.md"
     return count_tokens_from_file(path1) + count_tokens_from_file(path2)
     #return count_tokens_from_file(path2)
 

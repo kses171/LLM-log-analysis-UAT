@@ -7,9 +7,9 @@ from pathlib import Path
 
 def show_rdp_events_page():
     st.header("RDP Events: Upload Parameters")
-    logs_file = st.file_uploader("Upload RDP Logs File", type=["evtx", "log", "txt"], key="rdp_logs", help="Does not do anything now")
-    prompt1_file = st.file_uploader("Upload RDP Prompt 1 File", type=["txt", "json", "md"], key="rdp_prompt1")
-    prompt2_file = st.file_uploader("Upload RDP Prompt 2 File", type=["txt", "json", "md"], key="rdp_prompt2")
+    logs_file = st.file_uploader("Upload RDP Logs File", type=["json"], key="rdp_logs", help="Upload JSON logs")
+    prompt1_file = st.file_uploader("Upload RDP Prompt 1 File", type=["txt"], key="rdp_prompt1")
+    prompt2_file = st.file_uploader("Upload RDP Prompt 2 File", type=["txt"], key="rdp_prompt2")
     rdp_param_1 = st.number_input(
         "RDP PARAM 1:",
         min_value=0,

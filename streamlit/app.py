@@ -1,8 +1,5 @@
 import streamlit as st
-import subprocess
 import sys
-import os
-import requests
 from pathlib import Path
 from scripts.basic_chat import show_basic_chat_page
 from scripts.rdp_events import show_rdp_events_page
@@ -21,7 +18,8 @@ st.title("Windows Event Log Analyzer")
 # Dropdown for event type
 event_type = st.selectbox(
     "Choose Event Type to Analyze:",
-    ("Task Scheduler", "Upload CSV", "Basic Chat", "RDP Events")
+    #("Task Scheduler", "Basic Chat", "RDP Events", "Upload CSV")
+    ("Basic Chat", "Task Scheduler", "RDP Events", "Upload CSV")
 )
 
 # BASIC CHAT SECTION

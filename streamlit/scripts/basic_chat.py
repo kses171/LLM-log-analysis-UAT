@@ -1,13 +1,22 @@
 import streamlit as st
-import requests
-import json
 import logging
 import PyPDF2
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────
+# Project imports
+# ──────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+from LLM_APIs.llm_local import call_local_llm
+from LLM_APIs.llm_bedrock import call_bedrock
+
+
 def show_basic_chat_page():
-    st.header("Basic Chat with Ollama")
+    st.header("Basic Chat with LLM")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -17,14 +26,15 @@ def show_basic_chat_page():
 
     # Display chat history
     for role, text in st.session_state.messages:
-        speaker = "👤 You" if role == "user" else "🤖 Ollama"
+        speaker = "You" if role == "user" else "Bot"
         st.markdown(f"**{speaker}:** {text}")
 
-    # Model settings
-    model_name = st.text_input("Model Name", value="mistral:7b")
+    # Model + provider selection
+    provider = st.radio("LLM Provider", ["Local Ollama", "AWS Bedrock"])
+    model_name = st.text_input("Model Name", value="apac.anthropic.claude-sonnet-4-20250514-v1:0")
     system_prompt = st.text_area("System Prompt", value="You are a helpful assistant.", height=100)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.7)
-    max_tokens = st.number_input("Max Tokens", min_value=1, value=512)
+    max_tokens = st.number_input("Max Tokens", min_value=1, value=8192)
 
     # File upload
     uploaded_file = st.file_uploader("Attach a file", type=["txt", "md", "csv", "json", "pdf"])
@@ -58,40 +68,18 @@ def show_basic_chat_page():
             conversation_text += f"\n[Attached File Content]\n{st.session_state.file_content}\n\n"
 
         for role, text in st.session_state.messages:
-            if role == "user":
-                conversation_text += f"User: {text}\n"
-            else:
-                conversation_text += f"Ollama: {text}\n"
-
-        payload = {
-            "model": model_name,
-            "prompt": conversation_text,
-            "stream": True,  # enable streaming
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
-        }
+            conversation_text += f"{'User' if role == 'user' else 'Bot'}: {text}\n"
 
         reply = ""
         placeholder = st.empty()  # placeholder for live output
 
-        try:
-            with requests.post("http://localhost:11434/api/generate", json=payload, stream=True) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        try:
-                            data = json.loads(line.decode("utf-8"))
-                            if "response" in data:
-                                reply += data["response"]
-                                placeholder.markdown(f"**🤖 Ollama:** {reply}")
-                        except json.JSONDecodeError:
-                            continue  # ignore incomplete lines
+        if provider == "Local Ollama":
+            generator = call_local_llm(model_name, conversation_text, temperature, max_tokens)
+        else:
+            generator = call_bedrock(model_name, conversation_text, temperature, max_tokens)
 
-            st.session_state.messages.append(("bot", reply.strip()))
+        for partial in generator:
+            reply = partial or ""
+            placeholder.markdown(f"**Bot:** {reply}")
 
-        except Exception as e:
-            error_msg = f"Error calling Ollama API: {e}"
-            st.session_state.messages.append(("bot", error_msg))
-            logger.exception(error_msg)
+        st.session_state.messages.append(("bot", reply.strip()))

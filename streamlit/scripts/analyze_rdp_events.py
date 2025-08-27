@@ -1,10 +1,13 @@
 import argparse
 import time
 import sys
+import logging
 from pathlib import Path
 from datetime import datetime
 
-# resolve project root: two levels up from this script file
+# ──────────────────────────────
+# Project imports
+# ──────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -12,61 +15,100 @@ from Bedrock.call_claude_1stpass import generate_timeline
 from Bedrock.call_claude_2ndpass import generate_flagged_timeline
 from tools.appendprompts import append_prompts_to_md
 from tools.counttokens import count_input_tokens, count_output_tokens
+from tools.split_jsonToFit import split_json_by_tokens_and_time
+
+# ──────────────────────────────
+# Config & Constants
+# ──────────────────────────────
+MODEL_ID = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+REGION = "ap-southeast-1"
+MAX_TOKENS = 10_000
+SLEEP_BETWEEN_STAGES = 5
+TOKENS_PER_FILE = 50_000
+TIME_GAP_SECONDS = 3600
 
 
-def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_param: int):
-    # Configuration
-    run_id = f"rdp_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    base_runs_dir = Path("./runs")
-    run_dir = base_runs_dir / run_id
-    LOG_TYPE = 'RDP3'
-    MODEL_ID = 'apac.anthropic.claude-sonnet-4-20250514-v1:0'
-
-    # Ensure the run directory exists
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    start_time = time.time()
-
-    print("Starting Bedrock queries...")
-
-    ### 1. Generate timeline (first pass)
-    first_output_md = run_dir / f"{LOG_TYPE}-{run_id}-1.md"
-    generate_timeline(
-        md_filepath=first_output_md,
-        region="ap-southeast-1",
-        prompt_filepath=prompt1_file,
-        start_range=1,
-        end_range=rdp_param,
-        log_name=LOG_TYPE,
-        model_id=MODEL_ID,
-        max_tokens=10000
+# ──────────────────────────────
+# Helpers
+# ──────────────────────────────
+def setup_logging(run_dir: Path) -> None:
+    """Configure logging to console and file."""
+    log_file = run_dir / "pipeline.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file, mode="w"),
+        ],
     )
 
-    time.sleep(5)
+def split_logs(logs_file: Path) -> tuple[str, Path, int]:
+    """Split a large JSON log file into smaller parts."""
+    logging.info("Splitting large JSON file...")
+    json_name = logs_file.stem
+    output_dir = Path("./requestsToLLM") / json_name
 
-    # 2. Generate flagged timeline (second pass)
-    flagged_output_md = run_dir / f"{LOG_TYPE}-{run_id}-3.md"
+    num_parts = split_json_by_tokens_and_time(
+        input_file=logs_file,
+        output_dir=output_dir,
+        tokens_per_file=TOKENS_PER_FILE,
+        time_gap_seconds=TIME_GAP_SECONDS,
+    )
+
+    logging.info(f"JSON split into {num_parts} parts.")
+    return json_name, output_dir, num_parts
+
+
+def generate_first_pass(run_dir: Path, prompt_file: Path, num_parts: int, json_name: str):
+    """Run the first-pass timeline generation."""
+    out_path = run_dir / f"{run_dir.name}-1.md"
+    generate_timeline(
+        md_filepath=out_path,
+        region=REGION,
+        prompt_filepath=prompt_file,
+        start_range=1,
+        end_range=num_parts + 1,
+        log_name=json_name,
+        model_id=MODEL_ID,
+        max_tokens=MAX_TOKENS,
+    )
+    return out_path
+
+
+def generate_second_pass(run_dir: Path, prompt_file: Path, first_output_md: Path):
+    """Run the second-pass flagged timeline generation."""
+    out_path = run_dir / f"{run_dir.name}-2.md"
     generate_flagged_timeline(
-        md_filepath=flagged_output_md,
-        prompt_filepath=prompt2_file,
+        md_filepath=out_path,
+        prompt_filepath=prompt_file,
         json_path=first_output_md,
-        region="ap-southeast-1",
+        region=REGION,
         start_range=1,
         end_range=2,
-        max_tokens=10000,
+        max_tokens=MAX_TOKENS,
         delay_between_parts=0.0,
-        model_id=MODEL_ID
+        model_id=MODEL_ID,
     )
+    return out_path
 
-    time.sleep(5)
 
+def finalize_results(
+    flagged_output_md: Path,
+    first_output_md: Path,
+    prompt1_file: Path,
+    prompt2_file: Path,
+    run_dir: Path,
+    start_time: float,
+    json_name: str,
+):
+    """Perform token counting and append metadata to final output."""
+    output_tokens = count_output_tokens(run_dir.parent, run_dir.name)
+    input_tokens = count_input_tokens(
+        prompt1_file, prompt2_file, Path(f"./requestsToLLM/{json_name}/")
+    )
     end_time = time.time()
 
-    # 3. Token counting
-    output_tokens = count_output_tokens(base_runs_dir, run_id, LOG_TYPE)
-    input_tokens = count_input_tokens(prompt1_file, prompt2_file, Path(f'./requestsToLLM2/{LOG_TYPE}/'))
-
-    # 4. Append prompts/metadata to final markdown
     append_prompts_to_md(
         md_filepath=flagged_output_md,
         first_prompt_path=prompt1_file,
@@ -74,12 +116,53 @@ def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_param: int
         model_id=MODEL_ID,
         time_taken=end_time - start_time,
         input_tokens=input_tokens,
-        output_tokens=output_tokens
+        output_tokens=output_tokens,
+        inter_out_path=first_output_md,
     )
 
-    print(f"Analysis complete. Outputs saved in: {run_dir}")
+
+# ──────────────────────────────
+# Main pipeline
+# ──────────────────────────────
+def main(logs_file: Path, prompt1_file: Path, prompt2_file: Path, rdp_param: int):
+    """
+    Analyze RDP event logs:
+    1. Generate timeline (first pass)
+    2. Generate flagged timeline (second pass)
+    3. Token counting + append metadata
+    """
+    run_id = f"RDP_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_dir = Path("./runs") / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    setup_logging(run_dir)
+    logging.info(f"Run started: {run_id}")
+
+    start_time = time.time()
+
+    # 1. Split logs
+    if not logs_file.exists():
+        logging.error(f"Logs file not found: {logs_file}")
+        sys.exit(1)
+    json_name, _, num_parts = split_logs(logs_file)
+
+    # 2. First pass
+    first_output_md = generate_first_pass(run_dir, prompt1_file, num_parts, json_name)
+    time.sleep(SLEEP_BETWEEN_STAGES)
+
+    # 3. Second pass
+    flagged_output_md = generate_second_pass(run_dir, prompt2_file, first_output_md)
+    time.sleep(SLEEP_BETWEEN_STAGES)
+
+    # 4. Finalize
+    finalize_results(flagged_output_md, first_output_md, prompt1_file, prompt2_file, run_dir, start_time, json_name)
+
+    logging.info(f"Analysis complete. Outputs saved in: {run_dir}")
 
 
+# ──────────────────────────────
+# Entry point
+# ──────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze RDP event logs and generate timelines.")
     parser.add_argument("logs_path", type=Path, help="Path to the uploaded RDP logs file.")
@@ -88,9 +171,4 @@ if __name__ == "__main__":
     parser.add_argument("rdp_param", type=int, help="Numeric parameter for RDP processing (e.g., number of events).")
     args = parser.parse_args()
 
-    main(
-        logs_file=args.logs_path,
-        prompt1_file=args.prompt1_path,
-        prompt2_file=args.prompt2_path,
-        rdp_param=args.rdp_param
-    )
+    main(args.logs_path, args.prompt1_path, args.prompt2_path, args.rdp_param)

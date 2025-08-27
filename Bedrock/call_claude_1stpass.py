@@ -1,9 +1,16 @@
 # timeline_generator.py
-
-import boto3
 import json
 import time
 from typing import Optional
+import sys
+from pathlib import Path
+
+# ──────────────────────────────
+# Project imports
+# ──────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+from LLM_APIs.llm_bedrock import call_bedrock  # <-- use the shared client
 
 def generate_timeline(
     md_filepath: str,
@@ -23,21 +30,6 @@ def generate_timeline(
     """
     Iterate over JSON log parts, call Amazon Bedrock to generate timeline entries,
     and append each part's output to a Markdown file.
-
-    Args:
-        md_filepath: Path to the Markdown output file.
-        prompt_filepath: Path to the prompt template file (with `{log_json}` placeholder).
-        start_range: First part number (inclusive).
-        end_range: One past the last part number (exclusive).
-        log_name: Subdirectory under "./requestsToLLM2/" where JSON parts live.
-        region: AWS region for the Bedrock client.
-        model_id: The Bedrock model identifier.
-        delay_between_calls: Seconds to sleep between each API call.
-        long_delay_every: If provided, after this many parts, sleep an extra long delay.
-        long_delay_duration: Duration of the extra long sleep.
-        max_tokens: `max_tokens` parameter for the model.
-        temperature: Sampling temperature.
-        top_p: Nucleus sampling parameter.
     """
 
     # 1. Write (or overwrite) the file header
@@ -48,48 +40,32 @@ def generate_timeline(
     with open(prompt_filepath, 'r', encoding='utf-8') as f:
         prompt_template = f.read()
 
-    # 3. Initialize Bedrock client once
-    bedrock_runtime = boto3.client(
-        service_name='bedrock-runtime',
-        region_name=region  # Change to your preferred region
-    )
-
     for part_number in range(start_range, end_range):
         # Load the JSON log data
         json_path = f'./requestsToLLM/{log_name}/part_{part_number:02d}.json'
         with open(json_path, 'r', encoding='utf-8') as f:
             log_data = json.load(f)
+
         # Fill in the prompt
         prompt = prompt_template.format(log_json=json.dumps(log_data, indent=2))
 
-        # Prepare native request
-        # Prepare the request body
-        body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": prompt}],
-                }
-            ]
-        }
+        # Use llm_bedrock
+        reply = ""
+        for chunk in call_bedrock(
+            model_id=model_id,
+            conversation_text=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            region_name=region
+        ):
+            reply = chunk  # single final response
 
-        # Invoke Bedrock
-        response = bedrock_runtime.invoke_model(
-            modelId=model_id,  # Change model as needed
-            body=json.dumps(body)
-        )
-
-        response_body = json.loads(response['body'].read())
-        response = response_body['content'][0]['text'].strip()
-        print(f"[Part {part_number}] received {len(response)} chars")
+        print(f"[Part {part_number}] received {len(reply)} chars")
 
         # Append to markdown
         with open(md_filepath, 'a', encoding='utf-8') as md_file:
             md_file.write(f'## Part {part_number}\n\n')
-            md_file.write(response + '\n\n')
+            md_file.write(reply + '\n\n')
 
         # Throttle
         time.sleep(delay_between_calls)
