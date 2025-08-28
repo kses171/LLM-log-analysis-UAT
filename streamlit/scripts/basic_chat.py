@@ -73,7 +73,7 @@ def show_basic_chat_page():
         reply = ""
         placeholder = st.empty()  # placeholder for live output
 
-        if provider == "Local Ollama":
+        if provider == "Ollama (NUS Server)":
             generator = call_local_llm(model_name, conversation_text, temperature, max_tokens)
         else:
             generator = call_bedrock(model_name, conversation_text, temperature, max_tokens)
