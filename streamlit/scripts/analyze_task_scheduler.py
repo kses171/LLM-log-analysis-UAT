@@ -11,8 +11,8 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from Bedrock.call_claude_1stpass import generate_timeline
-from Bedrock.call_claude_2ndpass import generate_flagged_timeline
+from Bedrock.call_LLM_1stpass import generate_timeline
+from Bedrock.call_LLM_2ndpass import generate_flagged_timeline
 from tools.appendprompts import append_prompts_to_md
 from tools.counttokens import count_input_tokens, count_output_tokens
 from tools.split_jsonToFit import split_json_by_tokens_and_time

@@ -10,7 +10,7 @@ from pathlib import Path
 # ──────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
-from LLM_APIs.llm_bedrock import call_bedrock  # <-- use the shared client
+from LLM_APIs.llm_bedrockClaude import call_bedrock  # <-- use the shared client
 
 def generate_timeline(
     md_filepath: str,
