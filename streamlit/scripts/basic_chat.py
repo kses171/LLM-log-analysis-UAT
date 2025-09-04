@@ -15,6 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from LLM_APIs.llm_local import call_local_llm
 from LLM_APIs.llm_bedrockClaude import call_bedrock as call_bedrock_claude
 from LLM_APIs.llm_bedrockDeepseek import call_bedrock as call_bedrock_deepseek
+from LLM_APIs.llm_bedrockLlama import call_bedrock as call_bedrock_llama
 
 
 def show_basic_chat_page():
@@ -35,7 +36,7 @@ def show_basic_chat_page():
     provider = st.radio("LLM Provider", ["AWS Bedrock", "Ollama (NUS Server)"])
     model_name = st.text_input(
         "Model Name", 
-        value="us.deepseek.r1-v1:0"
+        value="us.meta.llama4-maverick-17b-instruct-v1:0"
     )
     system_prompt = st.text_area(
         "System Prompt", 
@@ -95,13 +96,13 @@ def show_basic_chat_page():
         else:
             # Choose Bedrock model function dynamically
             if "claude" in model_name.lower():
-                logging.info("Claude used")
                 generator = call_bedrock_claude(model_name, conversation_text, temperature, max_tokens, region_name)
             elif "deepseek" in model_name.lower():
-                logging.info("Deepseek used")
                 generator = call_bedrock_deepseek(model_name, conversation_text, temperature, max_tokens, region_name)
+            elif "llama" in model_name.lower():
+                generator = call_bedrock_llama(model_name, conversation_text, temperature, max_tokens, region_name)
             else:
-                st.error("Unsupported Bedrock model. Please use a Claude or DeepSeek model.")
+                st.error("Unsupported Bedrock model. Please use a Claude, DeepSeek or Llama model.")
                 return
 
         for partial in generator:

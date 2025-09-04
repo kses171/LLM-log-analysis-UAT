@@ -1,6 +1,7 @@
 import json
 import logging
 import boto3
+import streamlit as st
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,30 +22,35 @@ def call_bedrock(
     model_id: str,
     conversation_text: str,
     temperature: float = 0.6,
-    max_tokens: int = 512,
+    max_gen_len: int = 512,
     region_name: str = "us-east-1"
 ):  
-    # Split conversation_text by lines and map "User:" / "Bot:" prefixes
-    formatted = "<|begin_of_sentence|>"
-    for line in conversation_text.splitlines():
+    # Build conversation in Llama format
+    formatted = "<|begin_of_text|>"
+    
+    # Parse conversation text and format for Llama
+    lines = conversation_text.splitlines()
+    for line in lines:
         line = line.strip()
         if not line:
             continue
         if line.startswith("User:"):
-            formatted += f"<|User|>{line[len('User:'):].strip()}"
+            user_content = line[len('User:'):].strip()
+            formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{user_content}\n\n<|eot_id|>"
         elif line.startswith("Bot:"):
-            formatted += f"<|Assistant|>{line[len('Bot:'):].strip()}"
+            bot_content = line[len('Bot:'):].strip()
+            formatted += f"<|start_header_id|>assistant<|end_header_id|>\n\n{bot_content}\n\n<|eot_id|>"
         else:
-            # For system prompt or other context
-            formatted += f"{line}"
+            # For system prompt or other context - treat as user message
+            formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{line}\n\n<|eot_id|>"
 
-    # Always end with assistant ready to reply
-    formatted += "<|Assistant|><think>\n"
+    # End with assistant ready to reply
+    formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
 
-    # Prepare DeepSeek request
+    # Prepare Llama request
     native_request = {
         "prompt": formatted,
-        "max_tokens": max_tokens,
+        "max_gen_len": max_gen_len,
         "temperature": temperature,
     }
 
@@ -59,13 +65,12 @@ def call_bedrock(
         )
 
         model_response = json.loads(response['body'].read())
-        choices = model_response.get("choices", [])
-
-        if not choices:
-            yield "Error: No response choices returned from model"
+        generation = model_response.get("generation", "").strip()
+        
+        if not generation:
+            yield "Error: No generation returned from model"
             return
 
-        generation = choices[0].get("text", "").strip()
         yield generation
 
     except Exception as e:
@@ -76,7 +81,7 @@ def call_bedrock(
 ## for debugging & sanity check
 if __name__ == "__main__":
     for reply in call_bedrock(
-        model_id="us.deepseek.r1-v1:0",  # example DeepSeek Bedrock model ID
-        conversation_text="Hello from DeepSeek on Bedrock!"
+        model_id="us.meta.llama4-maverick-17b-instruct-v1:0",  # example Llama Bedrock model ID
+        conversation_text="User: Hello from Llama on Bedrock!"
     ):
         print("Reply:", reply)
